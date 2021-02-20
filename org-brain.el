@@ -990,8 +990,31 @@ For PREDICATE, REQUIRE-MATCH, INITIAL-INPUT, HIST, DEF and INHERIT-INPUT-METHOD 
         (goto-char (point-max)))
     (point)))
 
-(defun org-brain-keywords (entry)
-  "Get alist of `org-mode' keywords and their values in file ENTRY."
+(defun org-brain-build-keyword-cache (entry)
+    (push `(entry . ,(org-brain-keywords entry)) org-brain-keywords-cache)
+    )
+
+
+
+(defun org-brain-keywords-update-entry (entry)
+    "update the keyword cache for entry"
+    (setf (alist-get entry org-brain-keywords-cache) (org-brain-keywords-get entry)))
+
+
+
+(defun org-brain-keywords-cache-update ()
+    "function to add to after-save-hook to update cache"
+    (when (equal default-directory org-brain-path) ;; only update cache when in org-brain-path
+	
+	(let* ((buf-name (buffer-name))
+	       (org-brain-name (substring buf-name 0 (- (length buf-name) 4))))
+	    
+	    (org-brain-keywords-update-entry org-brain-name))))
+	
+
+
+(defun org-brain-keywords-get (entry)
+    "Get alist of `org-mode' keywords and their values in file ENTRY."
   (if (org-brain-filep entry)
       (with-temp-buffer
         (insert
@@ -1003,6 +1026,28 @@ For PREDICATE, REQUIRE-MATCH, INITIAL-INPUT, HIST, DEF and INHERIT-INPUT-METHOD 
             (cons (org-element-property :key kw)
                   (org-element-property :value kw)))))
     (error "Only file entries have keywords")))
+
+(defun org-brain-keywords (entry)
+    "get keywords: use cache is available, else look up in file"
+    (if (member entry org-brain-keywords-cache-keys)
+	    (assoc-default entry org-brain-keywords-cache)
+
+	(let ((kwds (org-brain-keywords-get entry)))
+
+	    (push `(,entry . ,kwds) org-brain-keywords-cache)
+	    (push entry org-brain-keywords-cache-keys)
+	    kwds)))
+
+
+
+(setq org-brain-keywords-cache ())
+(setq org-brain-keywords-cache-keys (mapcar 'car org-brain-keywords-cache))
+
+
+(add-hook 'after-save-hook 'org-brain-keywords-cache-update)
+
+
+
 
 (defun org-brain-get-tags (entry &optional inherit)
   "Return the tags at ENTRY. Only use local tags unless INHERIT is non-nil.
